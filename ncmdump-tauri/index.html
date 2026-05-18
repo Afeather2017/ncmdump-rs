@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="/src/styles.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ncmdump Tauri Login Demo</title>
+    <script type="module" src="/src/main.ts" defer></script>
+  </head>
+
+  <body>
+    <main class="shell">
+      <section class="panel hero">
+        <p class="eyebrow">ncmdump-tauri</p>
+        <h1 id="provider-title">Login to NetEase Cloud Music in the embedded webview</h1>
+        <p class="lede">
+          This example now supports both NetEase and Bilibili. It uses the same pattern as
+          `ytdl-audio`: navigate the Tauri webview to the site, finish login there, then
+          extract cookies from that webview into the Rust session store.
+        </p>
+      </section>
+
+      <section class="panel controls">
+        <div class="provider-switch">
+          <button type="button" class="provider-tab" data-provider="netease" data-active="true">NetEase</button>
+          <button type="button" class="provider-tab secondary" data-provider="bilibili" data-active="false">Bilibili</button>
+        </div>
+
+        <p class="provider-hint" id="provider-hint"></p>
+
+        <div class="actions">
+          <button id="open-login" type="button">Open NetEase Login</button>
+          <button id="capture-login" type="button">Capture MUSIC_U</button>
+          <button id="refresh-status" type="button" class="secondary">Refresh Status</button>
+          <button id="logout" type="button" class="danger">Clear Session</button>
+        </div>
+
+        <dl class="status-grid">
+          <div>
+            <dt>Status</dt>
+            <dd id="status-value">Loading...</dd>
+          </div>
+          <div>
+            <dt>Session File</dt>
+            <dd id="session-path">Loading...</dd>
+          </div>
+          <div>
+            <dt>Saved Cookies</dt>
+            <dd id="summary">Loading...</dd>
+          </div>
+        </dl>
+
+        <p class="message" id="message" data-kind="info"></p>
+      </section>
+
+      <section class="panel steps">
+        <h2>Flow</h2>
+        <ol>
+          <li>Choose NetEase or Bilibili.</li>
+          <li>Click the open button. The main Tauri webview navigates to <span data-provider-copy="login-url">music.163.com</span>.</li>
+          <li>Finish login inside that same webview.</li>
+          <li>Click the capture button. The app reads the webview cookie store and persists the matching backend session.</li>
+        </ol>
+      </section>
+    </main>
+  </body>
+</html>

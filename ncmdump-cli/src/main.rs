@@ -111,14 +111,14 @@ enum Command {
     /// Show Bilibili video details
     #[command(name = "bili-info")]
     BiliInfo {
-        /// BV ID (e.g. `BV1xx411c7mD`)
-        bvid: String,
+        /// BV ID, av ID, or full Bilibili video URL
+        video: String,
     },
     /// Download audio from Bilibili video
     #[command(name = "bili-download")]
     BiliDownload {
-        /// BV ID
-        bvid: String,
+        /// BV ID, av ID, or full Bilibili video URL
+        video: String,
         /// Output format
         #[arg(short, long, default_value = "mp3")]
         format: BiliFormatArg,
@@ -225,12 +225,12 @@ fn main() -> Result<()> {
             limit,
             page,
         } => cmd_bili_search(&keyword, limit, page),
-        Command::BiliInfo { bvid } => cmd_bili_info(&bvid),
+        Command::BiliInfo { video } => cmd_bili_info(&video),
         Command::BiliDownload {
-            bvid,
+            video,
             format,
             output,
-        } => cmd_bili_download(&bvid, format, output),
+        } => cmd_bili_download(&video, format, output),
         Command::BiliMe => cmd_bili_me(),
     }
 }
@@ -524,9 +524,10 @@ fn cmd_bili_search(keyword: &str, limit: u64, page: u64) -> Result<()> {
     Ok(())
 }
 
-fn cmd_bili_info(bvid: &str) -> Result<()> {
+fn cmd_bili_info(video: &str) -> Result<()> {
     let client = bilibili_api::BilibiliClient::new()?;
-    let v = client.video_detail(bvid)?;
+    let bvid = client.resolve_bvid(video)?;
+    let v = client.video_detail(&bvid)?;
     println!("Title:    {}", v.title);
     println!("BV ID:    {}", v.bvid);
     println!("AV ID:    {}", v.aid);
@@ -543,18 +544,19 @@ fn cmd_bili_info(bvid: &str) -> Result<()> {
     Ok(())
 }
 
-fn cmd_bili_download(bvid: &str, format: BiliFormatArg, output: Option<PathBuf>) -> Result<()> {
+fn cmd_bili_download(video: &str, format: BiliFormatArg, output: Option<PathBuf>) -> Result<()> {
     if !bilibili_api::download::ffmpeg_available() {
         anyhow::bail!("ffmpeg not found in PATH. Please install ffmpeg first.");
     }
 
     let client = bilibili_api::BilibiliClient::new()?;
+    let bvid = client.resolve_bvid(video)?;
     let fmt: bilibili_api::types::AudioFormat = format.into();
 
     let dest = output.unwrap_or_else(|| PathBuf::from(format!("{bvid}.{}", fmt.extension())));
 
     println!("Downloading audio from {bvid}...");
-    let size = client.download_audio(bvid, &dest, fmt)?;
+    let size = client.download_audio(&bvid, &dest, fmt)?;
     println!("Downloaded {} ({} bytes)", dest.display(), size);
     Ok(())
 }
