@@ -82,6 +82,77 @@ body {
   color: #5e4b39;
 }
 
+.download-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.results {
+  display: grid;
+  gap: 10px;
+}
+
+.result-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 14px 16px;
+  border: 1px solid rgba(64, 37, 17, 0.1);
+  border-radius: 18px;
+  background: rgba(255, 249, 240, 0.72);
+}
+
+.result-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.result-copy strong,
+.result-copy span {
+  overflow-wrap: anywhere;
+}
+
+.result-copy span {
+  color: #5e4b39;
+  font-size: 0.95rem;
+}
+
+.result-empty {
+  margin: 0;
+  color: #5e4b39;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+  color: #5e4b39;
+}
+
+.field span {
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #8a5130;
+}
+
+.field input {
+  width: 100%;
+  border: 1px solid rgba(64, 37, 17, 0.14);
+  border-radius: 16px;
+  padding: 0.9rem 1rem;
+  font: inherit;
+  color: #1d1a16;
+  background: rgba(255, 251, 244, 0.92);
+}
+
+.field input:focus {
+  outline: 2px solid rgba(177, 78, 33, 0.3);
+  outline-offset: 1px;
+}
+
 button {
   border: 0;
   border-radius: 999px;

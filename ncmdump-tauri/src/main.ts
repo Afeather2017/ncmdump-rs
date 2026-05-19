@@ -9,6 +9,25 @@ type ProviderStatus = {
   summary: string;
 };
 
+type DownloadResult = {
+  provider: Provider;
+  saved_path: string;
+};
+
+type NeteaseSearchItem = {
+  id: number;
+  name: string;
+  artists: string;
+  album: string;
+};
+
+type BilibiliSearchItem = {
+  bvid: string;
+  title: string;
+  author: string;
+  duration: string;
+};
+
 const providerCopy: Record<
   Provider,
   {
@@ -53,6 +72,13 @@ let summaryEl: HTMLElement | null;
 let messageEl: HTMLElement | null;
 let openButtonEl: HTMLButtonElement | null;
 let captureButtonEl: HTMLButtonElement | null;
+let bilibiliInputEl: HTMLInputElement | null;
+let neteaseTrackIdEl: HTMLInputElement | null;
+let downloadPathEl: HTMLElement | null;
+let neteaseSearchEl: HTMLInputElement | null;
+let bilibiliSearchEl: HTMLInputElement | null;
+let neteaseResultsEl: HTMLElement | null;
+let bilibiliResultsEl: HTMLElement | null;
 
 function setMessage(message: string, kind: "info" | "error" = "info") {
   if (!messageEl) return;
@@ -89,6 +115,80 @@ function renderStatus(status: ProviderStatus) {
   if (summaryEl) {
     summaryEl.textContent = status.summary;
   }
+}
+
+function renderDownload(result: DownloadResult) {
+  if (downloadPathEl) {
+    downloadPathEl.textContent = result.saved_path;
+  }
+}
+
+function renderNeteaseResults(items: NeteaseSearchItem[]) {
+  if (!neteaseResultsEl) return;
+  if (items.length === 0) {
+    neteaseResultsEl.innerHTML = `<p class="result-empty">No NetEase results.</p>`;
+    return;
+  }
+  neteaseResultsEl.innerHTML = items
+    .map(
+      (item) => `
+        <article class="result-card">
+          <div class="result-copy">
+            <strong>${item.name}</strong>
+            <span>${item.artists}</span>
+            <span>${item.album}</span>
+            <span>ID: ${item.id}</span>
+          </div>
+          <button type="button" class="secondary" data-download-netease-id="${item.id}">Download</button>
+        </article>
+      `,
+    )
+    .join("");
+
+  neteaseResultsEl.querySelectorAll<HTMLButtonElement>("[data-download-netease-id]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const trackId = Number(button.dataset.downloadNeteaseId);
+      const result = await runAction(
+        () => invoke<DownloadResult>("download_netease_track", { trackId }),
+        "Downloaded NetEase track.",
+      );
+      renderDownload(result);
+    });
+  });
+}
+
+function renderBilibiliResults(items: BilibiliSearchItem[]) {
+  if (!bilibiliResultsEl) return;
+  if (items.length === 0) {
+    bilibiliResultsEl.innerHTML = `<p class="result-empty">No Bilibili results.</p>`;
+    return;
+  }
+  bilibiliResultsEl.innerHTML = items
+    .map(
+      (item) => `
+        <article class="result-card">
+          <div class="result-copy">
+            <strong>${item.title}</strong>
+            <span>${item.author}</span>
+            <span>${item.duration}</span>
+            <span>${item.bvid}</span>
+          </div>
+          <button type="button" class="secondary" data-download-bilibili-id="${item.bvid}">Download</button>
+        </article>
+      `,
+    )
+    .join("");
+
+  bilibiliResultsEl.querySelectorAll<HTMLButtonElement>("[data-download-bilibili-id]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const input = button.dataset.downloadBilibiliId ?? "";
+      const result = await runAction(
+        () => invoke<DownloadResult>("download_bilibili_audio", { input }),
+        "Downloaded Bilibili audio stream.",
+      );
+      renderDownload(result);
+    });
+  });
 }
 
 async function refreshStatus(provider = currentProvider) {
@@ -135,6 +235,13 @@ window.addEventListener("DOMContentLoaded", async () => {
   messageEl = document.querySelector("#message");
   openButtonEl = document.querySelector("#open-login");
   captureButtonEl = document.querySelector("#capture-login");
+  bilibiliInputEl = document.querySelector("#bilibili-input");
+  neteaseTrackIdEl = document.querySelector("#netease-track-id");
+  downloadPathEl = document.querySelector("#download-path");
+  neteaseSearchEl = document.querySelector("#netease-search");
+  bilibiliSearchEl = document.querySelector("#bilibili-search");
+  neteaseResultsEl = document.querySelector("#netease-results");
+  bilibiliResultsEl = document.querySelector("#bilibili-results");
 
   document.querySelectorAll<HTMLButtonElement>("[data-provider]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -171,6 +278,51 @@ window.addEventListener("DOMContentLoaded", async () => {
       providerCopy[provider].clearSuccess,
     );
     renderStatus(status);
+  });
+
+  document.querySelector<HTMLButtonElement>("#download-bilibili")?.addEventListener("click", async () => {
+    const input = bilibiliInputEl?.value.trim() ?? "";
+    if (!input) {
+      setMessage("Enter a Bilibili URL or BV ID.", "error");
+      return;
+    }
+    const result = await runAction(
+      () => invoke<DownloadResult>("download_bilibili_audio", { input }),
+      "Downloaded Bilibili audio stream.",
+    );
+    renderDownload(result);
+  });
+
+  document.querySelector<HTMLButtonElement>("#download-netease")?.addEventListener("click", async () => {
+    const trackIdRaw = neteaseTrackIdEl?.value.trim() ?? "";
+    const trackId = Number(trackIdRaw);
+    if (!Number.isInteger(trackId) || trackId <= 0) {
+      setMessage("Enter a valid NetEase numeric track ID.", "error");
+      return;
+    }
+    const result = await runAction(
+      () => invoke<DownloadResult>("download_netease_track", { trackId }),
+      "Downloaded NetEase track.",
+    );
+    renderDownload(result);
+  });
+
+  document.querySelector<HTMLButtonElement>("#search-netease")?.addEventListener("click", async () => {
+    const keyword = neteaseSearchEl?.value.trim() ?? "";
+    const results = await runAction(
+      () => invoke<NeteaseSearchItem[]>("search_netease_tracks", { keyword }),
+      "NetEase search complete.",
+    );
+    renderNeteaseResults(results);
+  });
+
+  document.querySelector<HTMLButtonElement>("#search-bilibili")?.addEventListener("click", async () => {
+    const keyword = bilibiliSearchEl?.value.trim() ?? "";
+    const results = await runAction(
+      () => invoke<BilibiliSearchItem[]>("search_bilibili_videos", { keyword }),
+      "Bilibili search complete.",
+    );
+    renderBilibiliResults(results);
   });
 
   await switchProvider("netease");
