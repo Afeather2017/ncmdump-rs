@@ -1,13 +1,10 @@
 [package]
 name = "bilibili-api"
 version = "0.1.0"
-edition.workspace = true
-rust-version.workspace = true
-license.workspace = true
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
 description = "Bilibili video/audio API client for ncmdump-rs"
-
-[lints]
-workspace = true
 
 [dependencies]
 chrono = "0.4"

@@ -123,11 +123,7 @@ fn bilibili_output_path(
     extension: &str,
 ) -> Result<PathBuf, String> {
     let dir = download_dir(app)?;
-    Ok(dir.join(format!(
-        "{}.{}",
-        sanitize_file_component(title),
-        extension
-    )))
+    Ok(dir.join(format!("{}.{}", sanitize_file_component(title), extension)))
 }
 
 fn netease_output_path(
@@ -141,11 +137,7 @@ fn netease_output_path(
     } else {
         "mp3"
     };
-    Ok(dir.join(format!(
-        "{}.{}",
-        sanitize_file_component(title),
-        extension
-    )))
+    Ok(dir.join(format!("{}.{}", sanitize_file_component(title), extension)))
 }
 
 fn set_config_dir_env(app: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -524,7 +516,10 @@ fn search_bilibili_videos(
         .into_iter()
         .map(|video| BilibiliSearchItem {
             bvid: video.bvid,
-            title: video.title.replace("<em class=\"keyword\">", "").replace("</em>", ""),
+            title: video
+                .title
+                .replace("<em class=\"keyword\">", "")
+                .replace("</em>", ""),
             author: video.author,
             duration: video.duration,
         })
@@ -537,9 +532,11 @@ fn download_bilibili_audio(app: tauri::AppHandle, input: String) -> Result<Downl
     let client = BilibiliClient::new().map_err(|e| e.to_string())?;
     let bvid = client.resolve_bvid(&input).map_err(|e| e.to_string())?;
     let detail = client.video_detail(&bvid).map_err(|e| e.to_string())?;
-    let dash = client.dash_audio(&bvid, detail.cid).map_err(|e| e.to_string())?;
-    let stream = BilibiliClient::best_audio(&dash)
-        .ok_or_else(|| "no audio stream available".to_string())?;
+    let dash = client
+        .dash_audio(&bvid, detail.cid)
+        .map_err(|e| e.to_string())?;
+    let stream =
+        BilibiliClient::best_audio(&dash).ok_or_else(|| "no audio stream available".to_string())?;
     let url = if stream.base_url.is_empty() {
         stream
             .backup_url
@@ -557,7 +554,9 @@ fn download_bilibili_audio(app: tauri::AppHandle, input: String) -> Result<Downl
         "m4s"
     };
     let output = bilibili_output_path(&app, &detail.title, extension)?;
-    client.download_raw(url, &output).map_err(|e| e.to_string())?;
+    client
+        .download_raw(url, &output)
+        .map_err(|e| e.to_string())?;
 
     Ok(DownloadResult {
         provider: "bilibili",
@@ -566,10 +565,7 @@ fn download_bilibili_audio(app: tauri::AppHandle, input: String) -> Result<Downl
 }
 
 #[tauri::command]
-fn download_netease_track(
-    app: tauri::AppHandle,
-    track_id: u64,
-) -> Result<DownloadResult, String> {
+fn download_netease_track(app: tauri::AppHandle, track_id: u64) -> Result<DownloadResult, String> {
     set_config_dir_env(&app)?;
     let client = NeteaseClient::new().map_err(|e| e.to_string())?;
     let track = client.track_detail(track_id).map_err(|e| e.to_string())?;

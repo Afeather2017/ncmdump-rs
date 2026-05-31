@@ -1,9 +1,9 @@
 [package]
 name = "netease-api"
 version = "0.1.0"
-edition.workspace = true
-rust-version.workspace = true
-license.workspace = true
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
 
 [dependencies]
 aes = "0.8"
@@ -17,6 +17,3 @@ serde_json = "1"
 thiserror = "2"
 dirs = "6"
 urlencoding = "2"
-
-[lints]
-workspace = true
