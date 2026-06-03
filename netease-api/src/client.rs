@@ -27,9 +27,9 @@ use crate::crypto::weapi_encrypt;
 use crate::error::{NeteaseError, Result};
 use reqwest::blocking::Client;
 use serde_json::Value;
-use std::fs::File;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::Path;
+use std::time::Instant;
 
 const BASE_URL: &str = "https://music.163.com";
 const USER_AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) \
@@ -51,7 +51,7 @@ impl NeteaseClient {
     pub fn new() -> Result<Self> {
         let http = Client::builder()
             .user_agent(USER_AGENT)
-            .timeout(std::time::Duration::from_secs(30))
+            .connect_timeout(std::time::Duration::from_secs(30))
             .build()?;
         let session = Session::load()?;
         Ok(Self { http, session })
@@ -62,7 +62,7 @@ impl NeteaseClient {
     pub fn with_session(session: Session) -> Result<Self> {
         let http = Client::builder()
             .user_agent(USER_AGENT)
-            .timeout(std::time::Duration::from_secs(30))
+            .connect_timeout(std::time::Duration::from_secs(30))
             .build()?;
         Ok(Self { http, session })
     }
@@ -119,6 +119,9 @@ impl NeteaseClient {
 
     /// Download a file from `url` and write it to `dest`.
     ///
+    /// Streams to disk with stall detection: aborts if transfer speed stays
+    /// below 10 KB/s for 30 consecutive seconds.
+    ///
     /// Used internally by [`download_track`](Self::download_track) but can
     /// also be called directly with any URL (e.g. album cover images).
     ///
@@ -130,9 +133,48 @@ impl NeteaseClient {
             .header("Referer", "https://music.163.com/")
             .send()?;
 
-        let mut file = File::create(dest)?;
-        let bytes = resp.bytes()?;
-        file.write_all(&bytes)?;
-        Ok(bytes.len() as u64)
+        let mut file = std::fs::File::create(dest)?;
+        let mut reader = resp;
+        const BUF_SIZE: usize = 32 * 1024;
+        const STALL_THRESHOLD_BYTES: u64 = 10 * 1024;
+        const STALL_WINDOW_SECS: u64 = 30;
+
+        let mut buf = [0u8; BUF_SIZE];
+        let mut total: u64 = 0;
+        let mut window_start = Instant::now();
+        let mut window_bytes: u64 = 0;
+
+        loop {
+            match reader.read(&mut buf) {
+                Ok(0) => break,
+                Ok(n) => {
+                    file.write_all(&buf[..n])?;
+                    total += n as u64;
+                    window_bytes += n as u64;
+
+                    let elapsed = window_start.elapsed().as_secs();
+                    if elapsed >= STALL_WINDOW_SECS {
+                        let speed = window_bytes / elapsed.max(1);
+                        if speed < STALL_THRESHOLD_BYTES {
+                            return Err(std::io::Error::new(
+                                std::io::ErrorKind::TimedOut,
+                                format!(
+                                    "download stalled at {total} bytes \
+                                     ({speed} B/s over {elapsed}s)"
+                                ),
+                            )
+                            .into());
+                        }
+                        window_start = Instant::now();
+                        window_bytes = 0;
+                    }
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(e) => return Err(e.into()),
+            }
+        }
+
+        file.flush()?;
+        Ok(total)
     }
 }
