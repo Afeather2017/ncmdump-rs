@@ -8,6 +8,8 @@ use crate::wbi;
 use reqwest::blocking::Client;
 use serde_json::Value;
 use std::cell::RefCell;
+use std::io::{Read, Write};
+use std::time::Instant;
 
 const API_BASE: &str = "https://api.bilibili.com";
 const PASSPORT_BASE: &str = "https://passport.bilibili.com";
@@ -32,7 +34,7 @@ impl BilibiliClient {
     pub fn new() -> Result<Self> {
         let http = Client::builder()
             .user_agent(USER_AGENT)
-            .timeout(std::time::Duration::from_secs(30))
+            .connect_timeout(std::time::Duration::from_secs(30))
             .build()?;
         let session = BiliSession::load()?;
         Ok(Self {
@@ -125,6 +127,9 @@ impl BilibiliClient {
     }
 
     /// Download raw bytes from a URL with proper Bilibili headers.
+    ///
+    /// Streams to disk with stall detection: aborts if transfer speed stays
+    /// below 10 KB/s for 30 consecutive seconds.
     pub fn download_raw(&self, url: &str, dest: &std::path::Path) -> Result<u64> {
         let resp = self
             .http
@@ -133,9 +138,49 @@ impl BilibiliClient {
             .header("Origin", ORIGIN)
             .header("User-Agent", USER_AGENT)
             .send()?;
-        let bytes = resp.bytes()?;
-        std::fs::write(dest, &bytes)?;
-        Ok(bytes.len() as u64)
+
+        let mut file = std::fs::File::create(dest)?;
+        let mut reader = resp;
+        const BUF_SIZE: usize = 32 * 1024;
+        const STALL_THRESHOLD_BYTES: u64 = 10 * 1024; // 10 KB/s
+        const STALL_WINDOW_SECS: u64 = 30;
+
+        let mut buf = [0u8; BUF_SIZE];
+        let mut total: u64 = 0;
+        let mut window_start = Instant::now();
+        let mut window_bytes: u64 = 0;
+
+        loop {
+            match reader.read(&mut buf) {
+                Ok(0) => break,
+                Ok(n) => {
+                    file.write_all(&buf[..n])?;
+                    total += n as u64;
+                    window_bytes += n as u64;
+
+                    let elapsed = window_start.elapsed().as_secs();
+                    if elapsed >= STALL_WINDOW_SECS {
+                        let speed = window_bytes / elapsed.max(1);
+                        if speed < STALL_THRESHOLD_BYTES {
+                            return Err(std::io::Error::new(
+                                std::io::ErrorKind::TimedOut,
+                                format!(
+                                    "download stalled at {total} bytes \
+                                     ({speed} B/s over {elapsed}s)"
+                                ),
+                            ).into());
+                        }
+                        window_start = Instant::now();
+                        window_bytes = 0;
+                    }
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(e) => return Err(e.into()),
+            }
+        }
+
+        file.flush()?;
+        Ok(total)
     }
 
     // ── QR login ──
