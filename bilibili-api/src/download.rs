@@ -1,4 +1,4 @@
-//! Audio download pipeline: DASH stream download + ffmpeg conversion.
+//! Audio download pipeline: DASH stream download with optional ffmpeg conversion.
 
 use crate::client::BilibiliClient;
 use crate::error::{BilibiliError, Result};
@@ -7,16 +7,10 @@ use std::path::Path;
 use std::process::Command;
 
 impl BilibiliClient {
-    /// Download audio from a Bilibili video.
+    /// Download the best available raw audio stream from a Bilibili video.
     ///
-    /// Pipeline:
-    /// 1. Get video detail → cid
-    /// 2. Get DASH audio streams
-    /// 3. Select best audio stream
-    /// 4. Download raw m4s to temp file
-    /// 5. Convert with ffmpeg to target format
-    /// 6. Clean up temp file
-    pub fn download_audio(&self, bvid: &str, output: &Path, format: AudioFormat) -> Result<u64> {
+    /// This skips transcoding and writes the selected DASH audio payload as-is.
+    pub fn download_audio_raw(&self, bvid: &str, output: &Path) -> Result<u64> {
         let detail = self.video_detail(bvid)?;
         let cid = detail.cid;
 
@@ -34,10 +28,23 @@ impl BilibiliClient {
             &stream.base_url
         };
 
+        self.download_raw(url, output)
+    }
+
+    /// Download audio from a Bilibili video.
+    ///
+    /// Pipeline:
+    /// 1. Get video detail → cid
+    /// 2. Get DASH audio streams
+    /// 3. Select best audio stream
+    /// 4. Download raw m4s to temp file
+    /// 5. Convert with ffmpeg to target format
+    /// 6. Clean up temp file
+    pub fn download_audio(&self, bvid: &str, output: &Path, format: AudioFormat) -> Result<u64> {
         // Download raw m4s to temp file.
         let tmp_dir = std::env::temp_dir();
         let tmp_file = tmp_dir.join(format!("bili_{bvid}.m4s"));
-        self.download_raw(url, &tmp_file)?;
+        self.download_audio_raw(bvid, &tmp_file)?;
 
         // Convert with ffmpeg.
         ffmpeg_convert(&tmp_file, output, format)?;
