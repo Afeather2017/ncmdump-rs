@@ -168,7 +168,8 @@ impl BilibiliClient {
                                     "download stalled at {total} bytes \
                                      ({speed} B/s over {elapsed}s)"
                                 ),
-                            ).into());
+                            )
+                            .into());
                         }
                         window_start = Instant::now();
                         window_bytes = 0;
