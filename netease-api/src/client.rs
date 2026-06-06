@@ -25,13 +25,15 @@
 use crate::auth::Session;
 use crate::crypto::weapi_encrypt;
 use crate::error::{NeteaseError, Result};
-use reqwest::blocking::Client;
+use reqwest::blocking::{Client, ClientBuilder};
+use reqwest::Proxy;
 use serde_json::Value;
 use std::io::{Read, Write};
 use std::path::Path;
 use std::time::Instant;
 
 const BASE_URL: &str = "https://music.163.com";
+const NETEASE_PROXY_URL_ENV: &str = "NETEASE_RELAY_URL";
 const USER_AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) \
     AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
@@ -49,10 +51,7 @@ impl NeteaseClient {
     /// Create a new client, loading the session from
     /// `~/.config/ncmdump/session.json`.
     pub fn new() -> Result<Self> {
-        let http = Client::builder()
-            .user_agent(USER_AGENT)
-            .connect_timeout(std::time::Duration::from_secs(30))
-            .build()?;
+        let http = build_http_client()?;
         let session = Session::load()?;
         Ok(Self { http, session })
     }
@@ -60,10 +59,7 @@ impl NeteaseClient {
     /// Create a client with an explicit [`Session`] (useful for testing
     /// or when the cookie is provided programmatically).
     pub fn with_session(session: Session) -> Result<Self> {
-        let http = Client::builder()
-            .user_agent(USER_AGENT)
-            .connect_timeout(std::time::Duration::from_secs(30))
-            .build()?;
+        let http = build_http_client()?;
         Ok(Self { http, session })
     }
 
@@ -176,5 +172,73 @@ impl NeteaseClient {
 
         file.flush()?;
         Ok(total)
+    }
+}
+
+fn build_http_client() -> Result<Client> {
+    let mut builder = ClientBuilder::new()
+        .user_agent(USER_AGENT)
+        .connect_timeout(std::time::Duration::from_secs(30));
+
+    if let Some(proxy_url) = netease_proxy_url() {
+        builder = builder.proxy(Proxy::all(&proxy_url)?);
+    }
+
+    Ok(builder.build()?)
+}
+
+fn netease_proxy_url() -> Option<String> {
+    std::env::var(NETEASE_PROXY_URL_ENV)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::netease_proxy_url;
+
+    const NETEASE_PROXY_URL_ENV: &str = "NETEASE_RELAY_URL";
+
+    #[test]
+    fn netease_proxy_url_ignores_missing_or_blank_env() {
+        let original = std::env::var_os(NETEASE_PROXY_URL_ENV);
+
+        unsafe {
+            std::env::remove_var(NETEASE_PROXY_URL_ENV);
+        }
+        assert_eq!(netease_proxy_url(), None);
+
+        unsafe {
+            std::env::set_var(NETEASE_PROXY_URL_ENV, "   ");
+        }
+        assert_eq!(netease_proxy_url(), None);
+
+        restore_env(original);
+    }
+
+    #[test]
+    fn netease_proxy_url_reads_trimmed_env() {
+        let original = std::env::var_os(NETEASE_PROXY_URL_ENV);
+
+        unsafe {
+            std::env::set_var(
+                NETEASE_PROXY_URL_ENV,
+                "  http://relay.example.com:7890  ",
+            );
+        }
+        assert_eq!(
+            netease_proxy_url().as_deref(),
+            Some("http://relay.example.com:7890")
+        );
+
+        restore_env(original);
+    }
+
+    fn restore_env(value: Option<std::ffi::OsString>) {
+        match value {
+            Some(value) => unsafe { std::env::set_var(NETEASE_PROXY_URL_ENV, value) },
+            None => unsafe { std::env::remove_var(NETEASE_PROXY_URL_ENV) },
+        }
     }
 }
