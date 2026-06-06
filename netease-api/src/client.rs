@@ -25,8 +25,8 @@
 use crate::auth::Session;
 use crate::crypto::weapi_encrypt;
 use crate::error::{NeteaseError, Result};
-use reqwest::blocking::{Client, ClientBuilder};
 use reqwest::Proxy;
+use reqwest::blocking::{Client, ClientBuilder};
 use serde_json::Value;
 use std::io::{Read, Write};
 use std::path::Path;
@@ -222,10 +222,7 @@ mod tests {
         let original = std::env::var_os(NETEASE_PROXY_URL_ENV);
 
         unsafe {
-            std::env::set_var(
-                NETEASE_PROXY_URL_ENV,
-                "  http://relay.example.com:7890  ",
-            );
+            std::env::set_var(NETEASE_PROXY_URL_ENV, "  http://relay.example.com:7890  ");
         }
         assert_eq!(
             netease_proxy_url().as_deref(),
