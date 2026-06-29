@@ -1,6 +1,18 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 type Provider = "netease" | "bilibili";
+type DownloadProgressPhase =
+  | "queued"
+  | "preparing"
+  | "resolving_meta"
+  | "downloading"
+  | "post_processing"
+  | "embedding_cover"
+  | "saving_lyrics"
+  | "refreshing_library"
+  | "completed"
+  | "failed";
 
 type ProviderStatus = {
   provider: Provider;
@@ -12,6 +24,19 @@ type ProviderStatus = {
 type DownloadResult = {
   provider: Provider;
   saved_path: string;
+};
+
+type DownloadProgressSnapshot = {
+  job_id: string;
+  source: string;
+  state: string;
+  phase: DownloadProgressPhase;
+  percent: number | null;
+  message: string;
+  detail: string | null;
+  filename: string | null;
+  warning: string | null;
+  error: string | null;
 };
 
 type NeteaseSearchItem = {
@@ -75,6 +100,12 @@ let captureButtonEl: HTMLButtonElement | null;
 let bilibiliInputEl: HTMLInputElement | null;
 let neteaseTrackIdEl: HTMLInputElement | null;
 let downloadPathEl: HTMLElement | null;
+let downloadSourceEl: HTMLElement | null;
+let downloadStateEl: HTMLElement | null;
+let downloadPhaseEl: HTMLElement | null;
+let downloadPercentEl: HTMLElement | null;
+let downloadMessageEl: HTMLElement | null;
+let downloadDetailEl: HTMLElement | null;
 let neteaseSearchEl: HTMLInputElement | null;
 let bilibiliSearchEl: HTMLInputElement | null;
 let neteaseResultsEl: HTMLElement | null;
@@ -120,6 +151,18 @@ function renderStatus(status: ProviderStatus) {
 function renderDownload(result: DownloadResult) {
   if (downloadPathEl) {
     downloadPathEl.textContent = result.saved_path;
+  }
+}
+
+function renderProgress(snapshot: DownloadProgressSnapshot) {
+  if (downloadSourceEl) downloadSourceEl.textContent = snapshot.source;
+  if (downloadStateEl) downloadStateEl.textContent = snapshot.state;
+  if (downloadPhaseEl) downloadPhaseEl.textContent = snapshot.phase;
+  if (downloadPercentEl) downloadPercentEl.textContent = snapshot.percent === null ? "-" : `${snapshot.percent}%`;
+  if (downloadMessageEl) downloadMessageEl.textContent = snapshot.message;
+  if (downloadDetailEl) downloadDetailEl.textContent = snapshot.detail ?? snapshot.error ?? "-";
+  if (downloadPathEl && snapshot.filename) {
+    downloadPathEl.textContent = snapshot.filename;
   }
 }
 
@@ -238,10 +281,20 @@ window.addEventListener("DOMContentLoaded", async () => {
   bilibiliInputEl = document.querySelector("#bilibili-input");
   neteaseTrackIdEl = document.querySelector("#netease-track-id");
   downloadPathEl = document.querySelector("#download-path");
+  downloadSourceEl = document.querySelector("#download-source");
+  downloadStateEl = document.querySelector("#download-state");
+  downloadPhaseEl = document.querySelector("#download-phase");
+  downloadPercentEl = document.querySelector("#download-percent");
+  downloadMessageEl = document.querySelector("#download-message");
+  downloadDetailEl = document.querySelector("#download-detail");
   neteaseSearchEl = document.querySelector("#netease-search");
   bilibiliSearchEl = document.querySelector("#bilibili-search");
   neteaseResultsEl = document.querySelector("#netease-results");
   bilibiliResultsEl = document.querySelector("#bilibili-results");
+
+  await listen<DownloadProgressSnapshot>("download-progress", (event) => {
+    renderProgress(event.payload);
+  });
 
   document.querySelectorAll<HTMLButtonElement>("[data-provider]").forEach((button) => {
     button.addEventListener("click", async () => {

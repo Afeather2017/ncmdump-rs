@@ -25,11 +25,13 @@
 use crate::auth::Session;
 use crate::crypto::weapi_encrypt;
 use crate::error::{NeteaseError, Result};
+use download_core::{DownloadProgressEvent, DownloadProgressPhase, DownloadProgressReporter};
 use reqwest::Proxy;
 use reqwest::blocking::{Client, ClientBuilder};
 use serde_json::Value;
 use std::io::{Read, Write};
 use std::path::Path;
+use std::sync::Arc;
 use std::time::Instant;
 
 const BASE_URL: &str = "https://music.163.com";
@@ -123,22 +125,53 @@ impl NeteaseClient {
     ///
     /// Returns the number of bytes written.
     pub fn download(&self, url: &str, dest: &Path) -> Result<u64> {
+        self.download_with_progress(
+            url,
+            dest,
+            "download".to_string(),
+            Arc::new(download_core::NoopProgressReporter),
+            "netease".to_string(),
+            "Downloading audio stream".to_string(),
+        )
+    }
+
+    pub(crate) fn download_with_progress(
+        &self,
+        url: &str,
+        dest: &Path,
+        job_id: String,
+        reporter: Arc<dyn DownloadProgressReporter>,
+        source: String,
+        message: String,
+    ) -> Result<u64> {
         let resp = self
             .http
             .get(url)
             .header("Referer", "https://music.163.com/")
             .send()?;
+        let total_bytes = resp.content_length();
 
         let mut file = std::fs::File::create(dest)?;
         let mut reader = resp;
         const BUF_SIZE: usize = 32 * 1024;
         const STALL_THRESHOLD_BYTES: u64 = 10 * 1024;
         const STALL_WINDOW_SECS: u64 = 30;
+        const REPORT_EVERY_BYTES: u64 = 512 * 1024;
 
         let mut buf = [0u8; BUF_SIZE];
         let mut total: u64 = 0;
         let mut window_start = Instant::now();
         let mut window_bytes: u64 = 0;
+        let mut last_reported = 0;
+
+        reporter.emit(DownloadProgressEvent {
+            job_id: job_id.clone(),
+            source: source.clone(),
+            phase: DownloadProgressPhase::Downloading,
+            percent: total_bytes.map(|_| 0),
+            message: message.clone(),
+            detail: total_bytes.map(|size| format!("0 / {size} bytes")),
+        });
 
         loop {
             match reader.read(&mut buf) {
@@ -152,27 +185,79 @@ impl NeteaseClient {
                     if elapsed >= STALL_WINDOW_SECS {
                         let speed = window_bytes / elapsed.max(1);
                         if speed < STALL_THRESHOLD_BYTES {
-                            return Err(std::io::Error::new(
-                                std::io::ErrorKind::TimedOut,
-                                format!(
-                                    "download stalled at {total} bytes \
-                                     ({speed} B/s over {elapsed}s)"
-                                ),
-                            )
-                            .into());
+                            let detail = format!(
+                                "download stalled at {total} bytes ({speed} B/s over {elapsed}s)"
+                            );
+                            reporter.emit(DownloadProgressEvent {
+                                job_id: job_id.clone(),
+                                source: source.clone(),
+                                phase: DownloadProgressPhase::Failed,
+                                percent: progress_percent(total, total_bytes),
+                                message: "Download stalled".to_string(),
+                                detail: Some(detail.clone()),
+                            });
+                            return Err(
+                                std::io::Error::new(std::io::ErrorKind::TimedOut, detail).into()
+                            );
                         }
                         window_start = Instant::now();
                         window_bytes = 0;
                     }
+
+                    if total.saturating_sub(last_reported) >= REPORT_EVERY_BYTES {
+                        last_reported = total;
+                        reporter.emit(DownloadProgressEvent {
+                            job_id: job_id.clone(),
+                            source: source.clone(),
+                            phase: DownloadProgressPhase::Downloading,
+                            percent: progress_percent(total, total_bytes),
+                            message: message.clone(),
+                            detail: download_detail(total, total_bytes),
+                        });
+                    }
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
-                Err(e) => return Err(e.into()),
+                Err(e) => {
+                    reporter.emit(DownloadProgressEvent {
+                        job_id: job_id.clone(),
+                        source: source.clone(),
+                        phase: DownloadProgressPhase::Failed,
+                        percent: progress_percent(total, total_bytes),
+                        message: "Download failed".to_string(),
+                        detail: Some(e.to_string()),
+                    });
+                    return Err(e.into());
+                }
             }
         }
 
         file.flush()?;
+        reporter.emit(DownloadProgressEvent {
+            job_id,
+            source,
+            phase: DownloadProgressPhase::Downloading,
+            percent: progress_percent(total, total_bytes).or(Some(100)),
+            message,
+            detail: download_detail(total, total_bytes),
+        });
         Ok(total)
     }
+}
+
+fn progress_percent(downloaded: u64, total: Option<u64>) -> Option<u8> {
+    total.and_then(|total| {
+        if total == 0 {
+            None
+        } else {
+            Some((downloaded.saturating_mul(100) / total).min(100) as u8)
+        }
+    })
+}
+
+fn download_detail(downloaded: u64, total: Option<u64>) -> Option<String> {
+    total
+        .map(|total| format!("{downloaded} / {total} bytes"))
+        .or_else(|| Some(format!("{downloaded} bytes")))
 }
 
 fn build_http_client() -> Result<Client> {

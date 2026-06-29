@@ -1,5 +1,9 @@
 use bilibili_api::auth::BiliSession;
 use bilibili_api::BilibiliClient;
+use download_core::{
+    apply_progress_event, DownloadProgressEvent, DownloadProgressPhase, DownloadProgressReporter,
+    DownloadProgressSnapshot,
+};
 #[cfg(target_os = "android")]
 use jni::objects::{JObject, JValue};
 #[cfg(target_os = "android")]
@@ -11,13 +15,16 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 #[cfg(target_os = "android")]
-use std::sync::{Mutex, OnceLock};
-use tauri::Manager;
+use std::sync::OnceLock;
+use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
+use tauri::{Emitter, Manager};
 
 const NETEASE_LOGIN_URL: &str = "https://music.163.com/";
 const BILIBILI_LOGIN_URL: &str = "https://www.bilibili.com/";
 const MAIN_WINDOW_LABEL: &str = "main";
 const NCMDUMP_CONFIG_DIR_ENV: &str = "NCMDUMP_CONFIG_DIR";
+const DOWNLOAD_PROGRESS_EVENT: &str = "download-progress";
 
 #[cfg(target_os = "android")]
 static ANDROID_EXTERNAL_DATA_DIR: OnceLock<Mutex<Option<PathBuf>>> = OnceLock::new();
@@ -57,6 +64,43 @@ struct BilibiliSearchItem {
     title: String,
     author: String,
     duration: String,
+}
+
+struct TauriProgressReporter {
+    app: tauri::AppHandle,
+    snapshot: Mutex<Option<DownloadProgressSnapshot>>,
+}
+
+impl TauriProgressReporter {
+    fn new(app: tauri::AppHandle) -> Self {
+        Self {
+            app,
+            snapshot: Mutex::new(None),
+        }
+    }
+}
+
+impl DownloadProgressReporter for TauriProgressReporter {
+    fn emit(&self, event: DownloadProgressEvent) {
+        let Ok(mut snapshot_guard) = self.snapshot.lock() else {
+            return;
+        };
+
+        let mut snapshot = apply_progress_event(snapshot_guard.take(), event.clone());
+        match event.phase {
+            DownloadProgressPhase::Completed => {
+                snapshot.filename = event.detail.clone();
+                snapshot.error = None;
+            }
+            DownloadProgressPhase::Failed => {
+                snapshot.error = Some(event.message.clone());
+            }
+            _ => {}
+        }
+
+        let _ = self.app.emit(DOWNLOAD_PROGRESS_EVENT, snapshot.clone());
+        *snapshot_guard = Some(snapshot);
+    }
 }
 
 fn main_window(app: &tauri::AppHandle) -> Result<tauri::WebviewWindow, String> {
@@ -115,6 +159,14 @@ fn sanitize_file_component(input: &str) -> String {
     } else {
         trimmed.to_string()
     }
+}
+
+fn next_job_id(prefix: &str) -> String {
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis())
+        .unwrap_or(0);
+    format!("{prefix}-{ts}")
 }
 
 fn bilibili_output_path(
@@ -532,30 +584,15 @@ fn download_bilibili_audio(app: tauri::AppHandle, input: String) -> Result<Downl
     let client = BilibiliClient::new().map_err(|e| e.to_string())?;
     let bvid = client.resolve_bvid(&input).map_err(|e| e.to_string())?;
     let detail = client.video_detail(&bvid).map_err(|e| e.to_string())?;
-    let dash = client
-        .dash_audio(&bvid, detail.cid)
-        .map_err(|e| e.to_string())?;
-    let stream =
-        BilibiliClient::best_audio(&dash).ok_or_else(|| "no audio stream available".to_string())?;
-    let url = if stream.base_url.is_empty() {
-        stream
-            .backup_url
-            .first()
-            .ok_or_else(|| "no audio URL".to_string())?
-            .as_str()
-    } else {
-        &stream.base_url
+    let output = bilibili_output_path(&app, &detail.title, "m4s")?;
+    let reporter: Arc<dyn DownloadProgressReporter> =
+        Arc::new(TauriProgressReporter::new(app.clone()));
+    let request = bilibili_api::DownloadAudioRequest {
+        job_id: next_job_id("bilibili"),
+        bvid,
     };
-    let extension = if stream.codecs.contains("flac") || stream.mime_type.contains("flac") {
-        "flac"
-    } else if stream.mime_type.contains("mp4") || stream.codecs.contains("mp4a") {
-        "m4a"
-    } else {
-        "m4s"
-    };
-    let output = bilibili_output_path(&app, &detail.title, extension)?;
     client
-        .download_raw(url, &output)
+        .download_audio_raw_with_progress(&request, &output, reporter)
         .map_err(|e| e.to_string())?;
 
     Ok(DownloadResult {
@@ -570,8 +607,15 @@ fn download_netease_track(app: tauri::AppHandle, track_id: u64) -> Result<Downlo
     let client = NeteaseClient::new().map_err(|e| e.to_string())?;
     let track = client.track_detail(track_id).map_err(|e| e.to_string())?;
     let output = netease_output_path(&app, &track.name, Quality::Exhigh)?;
+    let reporter: Arc<dyn DownloadProgressReporter> =
+        Arc::new(TauriProgressReporter::new(app.clone()));
+    let request = netease_api::DownloadTrackRequest {
+        job_id: next_job_id("netease"),
+        track_id,
+        quality: Quality::Exhigh,
+    };
     client
-        .download_track(track_id, Quality::Exhigh, &output)
+        .download_track_with_progress(&request, &output, reporter)
         .map_err(|e| e.to_string())?;
 
     Ok(DownloadResult {

@@ -292,6 +292,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "dirs",
+ "download-core",
  "md-5",
  "reqwest 0.12.28",
  "serde",
@@ -951,6 +952,13 @@ dependencies = [
  "precomputed-hash",
  "selectors",
  "tendril",
+]
+
+[[package]]
+name = "download-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
 ]
 
 [[package]]
@@ -2337,6 +2345,7 @@ dependencies = [
  "anyhow",
  "bilibili-api",
  "clap",
+ "download-core",
  "ncmdump",
  "netease-api",
  "qrcode",
@@ -2356,6 +2365,7 @@ version = "0.1.0"
 dependencies = [
  "bilibili-api",
  "dirs",
+ "download-core",
  "jni",
  "ndk-context",
  "netease-api",
@@ -2405,6 +2415,7 @@ dependencies = [
  "base64 0.22.1",
  "cbc",
  "dirs",
+ "download-core",
  "num-bigint",
  "rand",
  "reqwest 0.12.28",
