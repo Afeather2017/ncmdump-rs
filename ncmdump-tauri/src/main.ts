@@ -71,9 +71,12 @@ const providerCopy: Record<
     openButton: "Open NetEase Login",
     captureButton: "Capture MUSIC_U",
     loginUrl: "music.163.com",
-    intro: "Open the NetEase page in this window, log in, then capture the MUSIC_U cookie.",
-    openSuccess: "Main webview navigated to music.163.com. Complete the login there, then capture cookies here.",
-    captureSuccess: "Captured MUSIC_U from the Tauri webview and saved the NetEase session.",
+    intro:
+      "Open the NetEase page in this window, log in, then capture the MUSIC_U cookie.",
+    openSuccess:
+      "Main webview navigated to music.163.com. Complete the login there, then capture cookies here.",
+    captureSuccess:
+      "Captured MUSIC_U from the Tauri webview and saved the NetEase session.",
     clearSuccess: "Cleared the saved NetEase session.",
   },
   bilibili: {
@@ -81,9 +84,12 @@ const providerCopy: Record<
     openButton: "Open Bilibili Login",
     captureButton: "Capture Bilibili Cookies",
     loginUrl: "www.bilibili.com",
-    intro: "Open Bilibili in this window, log in there, then capture SESSDATA and the related session cookies.",
-    openSuccess: "Main webview navigated to bilibili.com. Complete the login there, then capture cookies here.",
-    captureSuccess: "Captured SESSDATA and related Bilibili cookies from the Tauri webview and saved the session.",
+    intro:
+      "Open Bilibili in this window, log in there, then capture SESSDATA and the related session cookies.",
+    openSuccess:
+      "Main webview navigated to bilibili.com. Complete the login there, then capture cookies here.",
+    captureSuccess:
+      "Captured SESSDATA and related Bilibili cookies from the Tauri webview and saved the session.",
     clearSuccess: "Cleared the saved Bilibili session.",
   },
 };
@@ -119,26 +125,34 @@ function setMessage(message: string, kind: "info" | "error" = "info") {
 
 function applyProviderCopy(provider: Provider) {
   const copy = providerCopy[provider];
-  if (titleEl) titleEl.textContent = `Login to ${copy.title} in the embedded webview`;
+  if (titleEl)
+    titleEl.textContent = `Login to ${copy.title} in the embedded webview`;
   if (providerHintEl) providerHintEl.textContent = copy.intro;
   if (openButtonEl) openButtonEl.textContent = copy.openButton;
   if (captureButtonEl) captureButtonEl.textContent = copy.captureButton;
 
-  document.querySelectorAll<HTMLButtonElement>("[data-provider]").forEach((button) => {
-    button.dataset.active = button.dataset.provider === provider ? "true" : "false";
-  });
+  document
+    .querySelectorAll<HTMLButtonElement>("[data-provider]")
+    .forEach((button) => {
+      button.dataset.active =
+        button.dataset.provider === provider ? "true" : "false";
+    });
 
-  document.querySelectorAll<HTMLElement>("[data-provider-copy]").forEach((node) => {
-    const key = node.dataset.providerCopy;
-    if (key === "login-url") {
-      node.textContent = copy.loginUrl;
-    }
-  });
+  document
+    .querySelectorAll<HTMLElement>("[data-provider-copy]")
+    .forEach((node) => {
+      const key = node.dataset.providerCopy;
+      if (key === "login-url") {
+        node.textContent = copy.loginUrl;
+      }
+    });
 }
 
 function renderStatus(status: ProviderStatus) {
   if (statusValueEl) {
-    statusValueEl.textContent = status.is_logged_in ? "Logged in" : "Not logged in";
+    statusValueEl.textContent = status.is_logged_in
+      ? "Logged in"
+      : "Not logged in";
   }
   if (sessionPathEl) {
     sessionPathEl.textContent = status.session_path;
@@ -158,9 +172,12 @@ function renderProgress(snapshot: DownloadProgressSnapshot) {
   if (downloadSourceEl) downloadSourceEl.textContent = snapshot.source;
   if (downloadStateEl) downloadStateEl.textContent = snapshot.state;
   if (downloadPhaseEl) downloadPhaseEl.textContent = snapshot.phase;
-  if (downloadPercentEl) downloadPercentEl.textContent = snapshot.percent === null ? "-" : `${snapshot.percent}%`;
+  if (downloadPercentEl)
+    downloadPercentEl.textContent =
+      snapshot.percent === null ? "-" : `${snapshot.percent}%`;
   if (downloadMessageEl) downloadMessageEl.textContent = snapshot.message;
-  if (downloadDetailEl) downloadDetailEl.textContent = snapshot.detail ?? snapshot.error ?? "-";
+  if (downloadDetailEl)
+    downloadDetailEl.textContent = snapshot.detail ?? snapshot.error ?? "-";
   if (downloadPathEl && snapshot.filename) {
     downloadPathEl.textContent = snapshot.filename;
   }
@@ -188,16 +205,18 @@ function renderNeteaseResults(items: NeteaseSearchItem[]) {
     )
     .join("");
 
-  neteaseResultsEl.querySelectorAll<HTMLButtonElement>("[data-download-netease-id]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      const trackId = Number(button.dataset.downloadNeteaseId);
-      const result = await runAction(
-        () => invoke<DownloadResult>("download_netease_track", { trackId }),
-        "Downloaded NetEase track.",
-      );
-      renderDownload(result);
+  neteaseResultsEl
+    .querySelectorAll<HTMLButtonElement>("[data-download-netease-id]")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        const trackId = Number(button.dataset.downloadNeteaseId);
+        const result = await runAction(
+          () => invoke<DownloadResult>("download_netease_track", { trackId }),
+          "Downloaded NetEase track.",
+        );
+        renderDownload(result);
+      });
     });
-  });
 }
 
 function renderBilibiliResults(items: BilibiliSearchItem[]) {
@@ -222,16 +241,18 @@ function renderBilibiliResults(items: BilibiliSearchItem[]) {
     )
     .join("");
 
-  bilibiliResultsEl.querySelectorAll<HTMLButtonElement>("[data-download-bilibili-id]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      const input = button.dataset.downloadBilibiliId ?? "";
-      const result = await runAction(
-        () => invoke<DownloadResult>("download_bilibili_audio", { input }),
-        "Downloaded Bilibili audio stream.",
-      );
-      renderDownload(result);
+  bilibiliResultsEl
+    .querySelectorAll<HTMLButtonElement>("[data-download-bilibili-id]")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        const input = button.dataset.downloadBilibiliId ?? "";
+        const result = await runAction(
+          () => invoke<DownloadResult>("download_bilibili_audio", { input }),
+          "Downloaded Bilibili audio stream.",
+        );
+        renderDownload(result);
+      });
     });
-  });
 }
 
 async function refreshStatus(provider = currentProvider) {
@@ -296,11 +317,13 @@ window.addEventListener("DOMContentLoaded", async () => {
     renderProgress(event.payload);
   });
 
-  document.querySelectorAll<HTMLButtonElement>("[data-provider]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      await switchProvider(button.dataset.provider as Provider);
+  document
+    .querySelectorAll<HTMLButtonElement>("[data-provider]")
+    .forEach((button) => {
+      button.addEventListener("click", async () => {
+        await switchProvider(button.dataset.provider as Provider);
+      });
     });
-  });
 
   openButtonEl?.addEventListener("click", async () => {
     const provider = currentProvider;
@@ -319,64 +342,80 @@ window.addEventListener("DOMContentLoaded", async () => {
     renderStatus(status);
   });
 
-  document.querySelector<HTMLButtonElement>("#refresh-status")?.addEventListener("click", async () => {
-    const status = await runAction(() => refreshStatus(), "Session status refreshed.");
-    renderStatus(status);
-  });
+  document
+    .querySelector<HTMLButtonElement>("#refresh-status")
+    ?.addEventListener("click", async () => {
+      const status = await runAction(
+        () => refreshStatus(),
+        "Session status refreshed.",
+      );
+      renderStatus(status);
+    });
 
-  document.querySelector<HTMLButtonElement>("#logout")?.addEventListener("click", async () => {
-    const provider = currentProvider;
-    const status = await runAction(
-      () => invoke<ProviderStatus>("logout", { provider }),
-      providerCopy[provider].clearSuccess,
-    );
-    renderStatus(status);
-  });
+  document
+    .querySelector<HTMLButtonElement>("#logout")
+    ?.addEventListener("click", async () => {
+      const provider = currentProvider;
+      const status = await runAction(
+        () => invoke<ProviderStatus>("logout", { provider }),
+        providerCopy[provider].clearSuccess,
+      );
+      renderStatus(status);
+    });
 
-  document.querySelector<HTMLButtonElement>("#download-bilibili")?.addEventListener("click", async () => {
-    const input = bilibiliInputEl?.value.trim() ?? "";
-    if (!input) {
-      setMessage("Enter a Bilibili URL or BV ID.", "error");
-      return;
-    }
-    const result = await runAction(
-      () => invoke<DownloadResult>("download_bilibili_audio", { input }),
-      "Downloaded Bilibili audio stream.",
-    );
-    renderDownload(result);
-  });
+  document
+    .querySelector<HTMLButtonElement>("#download-bilibili")
+    ?.addEventListener("click", async () => {
+      const input = bilibiliInputEl?.value.trim() ?? "";
+      if (!input) {
+        setMessage("Enter a Bilibili URL or BV ID.", "error");
+        return;
+      }
+      const result = await runAction(
+        () => invoke<DownloadResult>("download_bilibili_audio", { input }),
+        "Downloaded Bilibili audio stream.",
+      );
+      renderDownload(result);
+    });
 
-  document.querySelector<HTMLButtonElement>("#download-netease")?.addEventListener("click", async () => {
-    const trackIdRaw = neteaseTrackIdEl?.value.trim() ?? "";
-    const trackId = Number(trackIdRaw);
-    if (!Number.isInteger(trackId) || trackId <= 0) {
-      setMessage("Enter a valid NetEase numeric track ID.", "error");
-      return;
-    }
-    const result = await runAction(
-      () => invoke<DownloadResult>("download_netease_track", { trackId }),
-      "Downloaded NetEase track.",
-    );
-    renderDownload(result);
-  });
+  document
+    .querySelector<HTMLButtonElement>("#download-netease")
+    ?.addEventListener("click", async () => {
+      const trackIdRaw = neteaseTrackIdEl?.value.trim() ?? "";
+      const trackId = Number(trackIdRaw);
+      if (!Number.isInteger(trackId) || trackId <= 0) {
+        setMessage("Enter a valid NetEase numeric track ID.", "error");
+        return;
+      }
+      const result = await runAction(
+        () => invoke<DownloadResult>("download_netease_track", { trackId }),
+        "Downloaded NetEase track.",
+      );
+      renderDownload(result);
+    });
 
-  document.querySelector<HTMLButtonElement>("#search-netease")?.addEventListener("click", async () => {
-    const keyword = neteaseSearchEl?.value.trim() ?? "";
-    const results = await runAction(
-      () => invoke<NeteaseSearchItem[]>("search_netease_tracks", { keyword }),
-      "NetEase search complete.",
-    );
-    renderNeteaseResults(results);
-  });
+  document
+    .querySelector<HTMLButtonElement>("#search-netease")
+    ?.addEventListener("click", async () => {
+      const keyword = neteaseSearchEl?.value.trim() ?? "";
+      const results = await runAction(
+        () => invoke<NeteaseSearchItem[]>("search_netease_tracks", { keyword }),
+        "NetEase search complete.",
+      );
+      renderNeteaseResults(results);
+    });
 
-  document.querySelector<HTMLButtonElement>("#search-bilibili")?.addEventListener("click", async () => {
-    const keyword = bilibiliSearchEl?.value.trim() ?? "";
-    const results = await runAction(
-      () => invoke<BilibiliSearchItem[]>("search_bilibili_videos", { keyword }),
-      "Bilibili search complete.",
-    );
-    renderBilibiliResults(results);
-  });
+  document
+    .querySelector<HTMLButtonElement>("#search-bilibili")
+    ?.addEventListener("click", async () => {
+      const keyword = bilibiliSearchEl?.value.trim() ?? "";
+      const results = await runAction(
+        () =>
+          invoke<BilibiliSearchItem[]>("search_bilibili_videos", { keyword }),
+        "Bilibili search complete.",
+      );
+      renderBilibiliResults(results);
+    });
 
   await switchProvider("netease");
 });
